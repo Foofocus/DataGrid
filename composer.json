@@ -22,10 +22,5 @@
 	},
 	"require-dev": {
 		"nette/database": "^2.3"
-	},
-	"extra": {
-		"branch-alias": {
-			"dev-develop": "5.7.x-dev"
-		}
 	}
 }

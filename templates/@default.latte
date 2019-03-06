@@ -1,0 +1,121 @@
+{block style}
+<style>
+    #{$name} table.dataTable tfoot th input.form-control{
+        width: 100%;
+        font-weight: normal
+    }
+</style>
+{/block}
+        {snippet tableList}
+                
+                   <div class="form-group" id="{$name}"> 
+                        <div class="col-sm-12">
+                             <table class="table table-bordered table-striped dataTable" width="100%">
+                                <thead>
+                                    <tr>
+                                        {foreach $columns AS $column}
+                                            <th>{$column->name}</th>
+                                        {/foreach}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                </tbody>
+                                {if $showFooter === true || $column_search === true}
+                                <tfoot>
+                                    <tr>
+                                        {foreach $columns AS $column}
+                                            <th class="dataTables_filter">{if $column_search === true && $column->search === true}<input type="text" placeholder="{$column->name}" class="form-control" />{else}{$column->name}{/if}</th>
+                                        {/foreach}
+                                    </tr>
+                                </tfoot>
+                                {/if}
+                            </table>
+                            <script>
+                              $(function () {
+                                var table = $("#"+{$name}+" table").DataTable({
+                                  'async'       : {$async},
+                                  'paging'      : {$paging},
+                                  'searching'   : {$searching},
+                                  'ordering'    : {$ordering},
+                                  'order'       : [[{$order[column]}, {$order[direction]|lower}]],
+                                  'info'        : true,
+                                  'responsive'  : {$responsive},
+                                  'processing'  : {$async},
+                                  'serverSide'  : {$async},
+                                  'pageLength'  : {$pageLength},
+                                  'lengthMenu'  : [{foreach $pageLengthSelect AS $val}{$val},{/foreach}],
+                                  'displayStart': {$offset},
+                                  ajax: {
+                                        url: {link getPage},
+                                        data: function ( d ) {
+                                            return $.extend( {}, d, {{foreach $ajaxParams AS $key => $value}{$key}: $("#"+{$value}).val(),{/foreach}});
+                                        }
+                                    },
+                                        columns: [{foreach $columns AS $key => $column}
+                                                    { data: {$key}, name: {$column->index}, orderable: {$column->sortable}, render: function(data){
+                                        
+                                                        {if $column->type === "link"}
+                                                            var obj = $("<a>",{ "href": data.link{ifset $column->classes}, "class":"{foreach $column->classes AS $class} {$class|noescape} {/foreach} {ifset $column->ajax}ajax{/ifset}"{/ifset}{ifset $column->attributes}, {foreach $column->attributes AS $k => $attribute}{$k}:{$attribute}{/foreach}{/ifset}{ifset $column->confirm},"data-confirm":{$column->confirm}{/ifset} }).text(data.value);
+                                                            return obj[0].outerHTML;       
+                                                        {else}
+                                                            var obj = $("<span>",{{ifset $column->classes} "class":"{foreach $column->classes AS $class} {$class|noescape} {/foreach}"{/ifset}{ifset $column->attributes}, {foreach $column->attributes AS $k => $attribute}{$k}:{$attribute}{/foreach}{/ifset} }).html(data);
+                                                            return obj[0].outerHTML;       
+                                                            return data;
+                                                        {/if}                                                        
+                                        
+                                                    } },
+                                                {/foreach}]
+                                });
+                                
+                                {if $column_search === true}
+                                     table.columns().every( function () {
+                                        var that = this;
+
+                                        $( 'input', this.footer() ).bind( 'change', function () {
+                                            if ( that.search() !== this.value ) {
+                                                that
+                                                    .search( this.value )
+                                                    .draw();
+                                            }
+                                        } );
+                                    } );
+                                {/if}
+                                    
+                                $(document.body).on("click","#"+{$name}+" table tr td a.ajax", function(e){
+                                    
+                                    e.preventDefault();
+                                    if($(this).attr("data-confirm")){
+                                        
+                                        if(confirm($(this).attr("data-confirm"))){
+
+                                            $.nette.ajax({ url: $(this).attr("href"), success: function(payload){
+
+                                                   {if $async === true} table.ajax.reload(); {/if}
+
+                                            } }); 
+
+                                        }
+
+                                    }else{
+                                    
+                                        $.nette.ajax({ url: $(this).attr("href"), success: function(payload){
+                                                
+                                               {if $async === true} table.ajax.reload(); {/if}
+        
+                                        } });                                        
+                                    
+                                    }
+                                    
+                                });
+                                
+
+                              });
+
+                            </script>
+                            {block additionalScript}
+                            {/block}                                            
+
+                        </div>
+                    </div>
+
+        {/snippet}

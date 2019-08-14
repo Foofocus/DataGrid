@@ -11,9 +11,7 @@
 	],
         "minimum-stability": "dev",
 	"autoload": {
-		"psr-0": {
-			"FooFocus\\DataGrid\\": "src/"
-		}
+		"classmap": ["src"]		
 	},
 	"require": {
 		"php": "^5.6|^7.0",

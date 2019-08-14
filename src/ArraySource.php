@@ -28,6 +28,7 @@ class ArraySource implements ISource
     private $search_string = null;
     private $search_columns_string = [];
     private $where = "";
+    private $error = null;
     
     private $columns = [];
     
@@ -175,7 +176,7 @@ class ArraySource implements ISource
                         $v = $this->columns[$key];
 
                         if(is_string($this->search_columns_string) AND !empty($v->type) AND $v->type === "integer") continue;
-                        $is = ($v->type === "integer") ? (($row[$v->index] == $this->search_columns_string) ? true : false) : ((strpos(strtolower($row[$v->index]), strtolower($this->search_columns_string)) !== false) ? true : false); 
+                        $is = ($v->type === "integer") ? (($row[$v->index] == $val) ? true : false) : ((strpos(strtolower($row[$v->index]), strtolower($val)) !== false) ? true : false); 
 
                         if($is){
                             $result[] = $row;
@@ -246,7 +247,7 @@ class ArraySource implements ISource
     
     private function getResponse(){
         
-        return array("data" => $this->data, "recordsTotal" => $this->recordsTotal, "recordsFiltered" => $this->recordsFiltered);
+        return array("data" => $this->data, "recordsTotal" => $this->recordsTotal, "recordsFiltered" => $this->recordsFiltered, "error" => $this->error);
         
     }
     

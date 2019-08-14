@@ -13,10 +13,11 @@ class NetteDatabase implements ISource
     const DEFAULT_SORT_COLUMN = 1;
     const DEFAULT_PAGE_LENGTH = 20;
     const DEFAULT_PAGE_LENGTH_SELECT = [10,20,50];
+    const TEXT_SEARCH_OPER_STRICT = "=";
         
     private $database;
     
-    private $query = null;
+    public $query = null;
     
     private $data = null;
     
@@ -44,14 +45,25 @@ class NetteDatabase implements ISource
     
     private $where_arr = [];
     
+    private $error = null;
+    
     public $date_format = "Y-m-d H:i:s";
     public $date_convert_sql = "YYYY-MM-DD HH24:MI:SS";
     public $text_search_oper = "ILIKE";
+    private $dbType = "mysql";
 
-    function __construct(Nette\Database\Context $database)
+    function __construct(\Nette\Database\Context $database)
     {
         
         $this->database = $database;
+        $this->setDBType();
+        
+    }
+    
+    private function setDBType(){
+        
+        $dsn = $this->database->getConnection()->getDsn(); 
+        $this->dbType = (strpos($dsn, "pgsql") !== false) ? "pgsql" : "mysql";
         
     }
     
@@ -196,11 +208,11 @@ class NetteDatabase implements ISource
 
         }else{
 
-            $colval = "%" . $value . "%";
+            $colval = !empty($column->search_strict) ? $value : "%" . $value . "%";
 
         }
         
-        $col = ($column->type === "date" ? "to_date(" . $column->index . "::character varying, '" . $this->date_convert_sql . "')" : $column->index) . (($column->type === "integer" || $column->type === "date") ? " = " : " " . $this->text_search_oper . " ") . "?"; 
+        $col = ($column->type === "date" ? "to_date(" . $column->index . "::character varying, '" . $this->date_convert_sql . "')" : ($column->type === "integer" ? $column->index . "::character varying" : $column->index)) . ($column->type === "date" ? " = " : " " . (!empty($column->search_strict) ? self::TEXT_SEARCH_OPER_STRICT : $this->text_search_oper) . " ") . "?"; 
         
         return array($col, $colval);
         
@@ -216,7 +228,7 @@ class NetteDatabase implements ISource
 
                 if($param = $this->prepareSearchParam($this->columns[$key], $val)){
                     list($col, $value) = $param;                
-                    $cols[] = $col; 
+                    $cols_column[] = $col; 
                     $this->where_arr[] = $value;
                     $this->param_arr[] = $value;
                 }
@@ -245,7 +257,7 @@ class NetteDatabase implements ISource
     private function prepareQuery(){
         
         $return =  "SELECT " . $this->prepareColumns() . " FROM (" . $this->query . ") AS sub " . $this->getWhere() . " ORDER BY ? " . $this->order["direction"] . " LIMIT ? OFFSET ?";
-
+        //echo $return; exit;
         return $return;
         
     }
@@ -266,9 +278,16 @@ class NetteDatabase implements ISource
         $this->param_arr[] = $this->pageLength;
         $this->param_arr[] = $this->offset;
         
-        $this->data = $this->database->queryArgs($query, $this->param_arr)->fetchAll(); 
-        
-        $this->getFilteredCount();                
+        try{
+            
+            $this->data = $this->database->queryArgs($query, $this->param_arr)->fetchAll(); 
+            $this->getFilteredCount();                
+            
+        }catch(Nette\Database\DriverException $e){
+            
+            $this->error = $e->getMessage();
+            
+        }
 
         return $this;                
         
@@ -292,7 +311,7 @@ class NetteDatabase implements ISource
     
     private function getResponse(){
         
-        return array("data" => $this->data, "recordsTotal" => $this->recordsTotal, "recordsFiltered" => $this->recordsFiltered);
+        return array("data" => $this->data, "recordsTotal" => $this->recordsTotal, "recordsFiltered" => $this->recordsFiltered, "error" => $this->error);
         
     }
     

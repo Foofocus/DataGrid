@@ -8,12 +8,23 @@ class DataGrid extends Nette\Application\UI\Control
 {
         
     const DEFAULT_OFFSET = 0;
-    const DEFAULT_SORT_DIRECTION = "DESC";
-    const SORT_DIRECTIONS = ["DESC","ASC"];
+    const SORT_DIRECTION_DESC = "DESC";
+    const SORT_DIRECTION_ASC = "ASC";
+    const DEFAULT_SORT_DIRECTION = self::SORT_DIRECTION_DESC;
+    const SORT_DIRECTIONS = [self::SORT_DIRECTION_DESC,self::SORT_DIRECTION_ASC];
     const DEFAULT_SORT_COLUMN = 0;
     const DEFAULT_PAGE_LENGTH = 20;
     const DEFAULT_PAGE_LENGTH_SELECT = [10,20,50];
     const DEFAULT_TEMPLATE_PATH = __DIR__ . "/templates/@default.latte";
+    const DEFAULT_LANGUAGE = "de";
+    
+    private $languageUrls = [
+        "de" => "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/German.json", 
+        "en" => "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/English.json", 
+        "cs" => "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Czech.json"
+        ];
+    
+    private $language = self::DEFAULT_LANGUAGE;
     
     private $name = "dataTablesTable";
     
@@ -35,18 +46,25 @@ class DataGrid extends Nette\Application\UI\Control
     
     public $column_search = false;
     
-    public $searchString = null;
-    public $showFooter = false;
-    public $searchColumns = [];
-    public $async = true;
-    public $paging = true;
-    public $searching = true;
-    public $ordering = true;
-    public $offset = self::DEFAULT_OFFSET;
-    public $pageLength = self::DEFAULT_PAGE_LENGTH;
-    public $pageLengthSelect = self::DEFAULT_PAGE_LENGTH_SELECT;
-    public $order = ["column" => self::DEFAULT_SORT_COLUMN, "direction" => self::DEFAULT_SORT_DIRECTION];
-    public $responsive = true;
+    private $searchString = null;
+    private $showFooter = false;
+    private $searchColumns = [];
+    private $async = true;
+    private $paging = true;
+    private $searching = true;
+    private $groupColumn = null;
+    private $ordering = true;
+    private $offset = self::DEFAULT_OFFSET;
+    private $pageLength = self::DEFAULT_PAGE_LENGTH;
+    private $pageLengthSelect = self::DEFAULT_PAGE_LENGTH_SELECT;
+    private $order = ["column" => self::DEFAULT_SORT_COLUMN, "direction" => self::DEFAULT_SORT_DIRECTION];
+    private $hashSearch = null;
+    private $responsive = true;
+    private $lazyLoading = true;
+    private $showInfo = true;
+    private $stateSave = false;
+    private $languageUrl = null;
+    private $id = null;
     
     private $ajaxParams = array();
     
@@ -55,6 +73,18 @@ class DataGrid extends Nette\Application\UI\Control
         
         $this->name = $name;
         $this->that = $that;
+        $this->setLanguage();
+        
+    }
+    
+    public function setLanguage($lang = null){
+        
+        if($lang AND array_key_exists($lang, $this->languageUrls)){
+            $this->language = $lang;
+        }
+        $this->languageUrl = $this->languageUrls[$this->language];
+
+        return $this;
         
     }
     
@@ -62,6 +92,29 @@ class DataGrid extends Nette\Application\UI\Control
         
         $this->source = $source;
         return $this;
+        
+    }
+    
+    public function setHashSearch($hash){
+        
+        $this->hashSearch = $hash;
+        return $this;
+        
+    }
+    
+    public function setSearching($value){
+        
+        $this->searching = $value;
+        
+        return $this;                
+        
+    }
+    
+    public function setID($value = null){
+        
+        $this->id = $value;
+        
+        return $this;                
         
     }
     
@@ -73,6 +126,42 @@ class DataGrid extends Nette\Application\UI\Control
     public function setResponsivity($value){
         
         $this->responsive = $value;
+        return $this;
+        
+    }
+    
+    /**
+     * set loading of grid in tab after the tab is visible
+     * @param boolean $value
+     * @return $this
+     */
+    public function setLateLoading($value){
+        
+        $this->lazyLoading = $value;
+        return $this;
+        
+    }
+    
+    /**
+     * set saving of last filter
+     * @param boolean $value
+     * @return $this
+     */
+    public function setStateSave($value){
+        
+        $this->stateSave = $value;
+        return $this;
+        
+    }
+    
+    /**
+     * show info "showing 1 to 3 of 3 entries"
+     * @param boolean $value
+     * @return $this
+     */
+    public function setInfo($value){
+        
+        $this->showInfo = $value;
         return $this;
         
     }
@@ -156,12 +245,49 @@ class DataGrid extends Nette\Application\UI\Control
         
     }
     
+    public function addSuccessCallbackFunction($name){
+        
+        $column = $this->getLastInsertedColumn();
+        if(!empty($column->ajax)) $column->successCallbackFunction = $name;
+        
+        return $this;                
+        
+    }
+    
     public function addConfirm($value){
         
         $column = $this->getLastInsertedColumn();
         $column->confirm = $value;
         
         return $this;                
+        
+    }
+    
+    
+    public function setRowCondition($value, $type, $cssclass){
+        
+        $column = $this->getLastInsertedColumn();
+        $column->rowCondition = (object) ["value" => $value, "type" => $type, "class" => $cssclass];
+        
+        return $this;
+        
+    }
+    
+    public function setHidden($value = true){
+        
+        $column = $this->getLastInsertedColumn();
+        $column->hidden = $value;
+        
+        return $this;                                
+        
+    }
+    
+    public function setStrictSearch($value = true){
+        
+        $column = $this->getLastInsertedColumn();
+        $column->search_strict = $value;
+        
+        return $this;                                
         
     }
     
@@ -192,6 +318,14 @@ class DataGrid extends Nette\Application\UI\Control
     public function setOrderColumn($column){
         
         $this->order["column"] = $column;
+        
+        return $this;
+        
+    }
+    
+    public function setGroupColumn($column){
+        
+        $this->groupColumn = $column;
         
         return $this;
         
@@ -249,9 +383,21 @@ class DataGrid extends Nette\Application\UI\Control
         
     }
     
-    public function setColumnText($index, $name, $sortable = false, $searchable = false){
+    private function setNewColumn(){
         
         $column = new \stdClass();
+        $column->hidden = false;
+        $column->sortable = false;
+        $column->searchable = false;
+        $column->search_strict = false;
+
+        return $column;
+        
+    }
+    
+    public function setColumnText($index, $name, $sortable = false, $searchable = false){
+        
+        $column = $this->setNewColumn();
         $column->index = $index;
         $column->name = $name;
         $column->sortable = $sortable;
@@ -263,10 +409,17 @@ class DataGrid extends Nette\Application\UI\Control
         return $this;
         
     }
-    
+     /**
+      * Add number column into the field list
+      * @param string $index name of data field
+      * @param string $name displayed name of column
+      * @param type $sortable is sortable
+      * @param type $searchable is searchable
+      * @return $this
+      */
     public function setColumnNumber($index, $name, $sortable = false, $searchable = false){
         
-        $column = new \stdClass();
+        $column = $this->setNewColumn();
         $column->index = $index;
         $column->name = $name;
         $column->sortable = $sortable;
@@ -290,7 +443,7 @@ class DataGrid extends Nette\Application\UI\Control
      */
     public function setColumnDateTime($index, $name, $sortable = false, $searchable = false, $format = null){
         
-        $column = new \stdClass();
+        $column = $this->setNewColumn();
         $column->index = $index;
         $column->name = $name;
         $column->sortable = $sortable;
@@ -317,7 +470,7 @@ class DataGrid extends Nette\Application\UI\Control
      */
     public function setColumnLink($index, $name, $link, $value = null, $params = array(), $sortable = false, $searchable = false){
         
-        $column = new \stdClass();
+        $column = $this->setNewColumn();
         $column->index = $index;
         $column->name = $name;
         $column->sortable = $sortable;
@@ -364,6 +517,7 @@ class DataGrid extends Nette\Application\UI\Control
                     $return[$column->value] = new \stdClass ();
                     $return[$column->value]->index = $column->value;
                     $return[$column->value]->search = $column->search;
+                    $return[$column->value]->search_strict = $column->search_strict;
                     $return[$column->value]->sortable = $column->sortable;
                     $return[$column->value]->type = $column->type;
                 }
@@ -372,7 +526,7 @@ class DataGrid extends Nette\Application\UI\Control
                     if(!array_key_exists($param, $return) AND substr($param,0,1) !== ":"){
                         $return[$param] = new \stdClass ();
                         $return[$param]->index = $param;
-                        $return[$param]->search = $column->search;
+                        $return[$param]->search = false;
                         $return[$param]->sortable = $column->sortable;
                         $return[$param]->type = $column->type;
                     }                    
@@ -385,6 +539,7 @@ class DataGrid extends Nette\Application\UI\Control
                     $return[$column->index] = new \stdClass ();
                     $return[$column->index]->index = $column->index;
                     $return[$column->index]->search = $column->search;
+                    $return[$column->index]->search_strict = $column->search_strict;
                     $return[$column->index]->sortable = $column->sortable;
                     $return[$column->index]->type = $column->type;
                 }                
@@ -438,7 +593,8 @@ class DataGrid extends Nette\Application\UI\Control
         
         $template = $this->template;
         $template->columns = $this->getColumns();
-        $template->name = $this->name;
+        $template->name = $this->name . "_" . rand(12145,54548);
+        $template->id = $this->id === null ? $template->name : $this->id;
         $template->column_search = $this->column_search;
         $template->offset = $this->getOffset();
         $template->pageLength = $this->pageLength;
@@ -452,6 +608,12 @@ class DataGrid extends Nette\Application\UI\Control
         $template->defaultTemplatePath = self::DEFAULT_TEMPLATE_PATH;
         $template->ajaxParams = $this->ajaxParams;
         $template->responsive = $this->responsive;
+        $template->lazyLoading = $this->lazyLoading;
+        $template->info = $this->showInfo;
+        $template->stateSave = $this->stateSave;
+        $template->groupColumn = $this->groupColumn;
+        $template->languageUrl = $this->languageUrl;
+        if($this->hashSearch) $template->hashSearch = $this->hashSearch;
         
         $template->setFile($this->getTemplatePath());
         $template->render();
@@ -574,9 +736,9 @@ class DataGrid extends Nette\Application\UI\Control
     public function getParams(){
         
         $params = $this->presenter->getParameters();
-        if(!empty($params["length"]) AND is_numeric($params["length"])) $this->setPageLength(intval($params["length"]));
+        if(!empty($params["length"]) AND is_numeric($params["length"])) $this->setPageLength((in_array(intval($params["length"]), $this->pageLengthSelect) ? intval($params["length"]) : $this->pageLength));
         if(!empty($params["start"]) AND is_numeric($params["start"])) $this->setOffset(intval($params["start"]));
-        if(!empty($params["order"][0]["column"]) AND is_numeric($params["order"][0]["column"])) $this->setOrderColumn(intval($params["order"][0]["column"]));
+        if(!empty($params["order"][0]["column"]) AND is_numeric($params["order"][0]["column"])) $this->setOrderColumn((intval($params["order"][0]["column"]) > count($this->columns) - 1) ? $this->order["column"] : intval($params["order"][0]["column"]));
         if(!empty($params["order"][0]["dir"]) AND is_string($params["order"][0]["dir"])) $this->setOrderDirection($params["order"][0]["dir"]);
         if(!empty($params["search"]["value"]) AND is_string($params["search"]["value"])) $this->setSearchString($params["search"]["value"]);
         foreach($params["columns"] AS $key => $column){
@@ -592,6 +754,7 @@ class DataGrid extends Nette\Application\UI\Control
     public function handleGetPage($page){
         
         $success = false;
+        $error = null;
         $data = array("data" => array());
         
         $this->getParams();
@@ -632,11 +795,17 @@ class DataGrid extends Nette\Application\UI\Control
             
         }
         
-        $data["draw"] = $this->draw;
-                        
+        if($data["error"] !== null){
+            
+            $error = $data["error"];
+            unset($data["error"]);
+            
+        }
+        
+        $data["draw"] = $this->draw;                        
         
         //\Tracy\Debugger::barDump($data);
-        $this->presenter->sendResponse(new \Nette\Application\Responses\JsonResponse(array_merge(array("success" => $success), $data)));
+        $this->presenter->sendResponse(new \Nette\Application\Responses\JsonResponse(array_merge(array("success" => $success, "error" => $error), $data)));
         
         return $this;
         
